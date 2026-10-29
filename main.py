@@ -195,7 +195,7 @@ class CamDisappearApp:
 
         # 4. Bottom controls bar
         bg_status = "SAVED" if self.clean_background is not None else "EMPTY! (Press B)"
-        ctrl = f"[B] Empty Chair: {bg_status} | [S] Snap | [C] Switch Cam | [R] Reset | [+/-] Sensitivity | [Q] Quit"
+        ctrl = f"[B] Empty Chair: {bg_status} | [C] Switch Cam | [R] Reset | [+/-] Sensitivity | [Q] Quit"
         cv2.putText(frame, ctrl, (12, h - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (210, 210, 210), 1, cv2.LINE_AA)
 
     def run(self):
@@ -207,13 +207,12 @@ class CamDisappearApp:
 
         print("\n" + "=" * 60)
         print("🚀 THANOSCAM IS READY!")
-        print("  [B]        -> Step out and save Empty Chair")
-        print("  [S] / Space-> Snap / Disintegrate immediately")
-        print("  [C]        -> Switch to next camera device")
-        print("  [T]        -> Switch trigger mode (Hybrid/Audio/Gesture/Hotkey)")
-        print("  [+] / [-]  -> Adjust snap sensitivity")
-        print("  [R]        -> Reset & Reappear")
-        print("  [Q] / ESC  -> Quit")
+        print("  [Snap Finger] -> Snap your fingers to disintegrate into dust!")
+        print("  [B]           -> Step out and save Empty Chair")
+        print("  [C]           -> Switch to next camera device")
+        print("  [+] / [-]     -> Adjust snap sensitivity")
+        print("  [R]           -> Reset & Reappear")
+        print("  [Q] / ESC     -> Quit")
         print("=" * 60 + "\n")
 
         try:
@@ -262,9 +261,6 @@ class CamDisappearApp:
                     break
                 elif key in [ord("b"), ord("B")]:
                     self.capture_background(raw_frame)
-                elif key in [ord("s"), ord("S"), 32]:  # S or Space
-                    mask = self.segmenter.get_mask(raw_frame)
-                    self.trigger_snap(raw_frame, mask, source="Hotkey")
                 elif key in [ord("c"), ord("C")]:
                     self.switch_camera()
                 elif key in [ord("r"), ord("R")]:

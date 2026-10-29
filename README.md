@@ -107,7 +107,8 @@ python main.py --demo
 | Key | Action | Description |
 | :---: | :--- | :--- |
 | **`B`** | **Save Background** | Step out of frame and press `B` to cache the empty room plate (`background.jpg`). |
-| **`S`** / **`Space`** | **Manual Snap** | Instantly triggers disintegration (safe fallback). |
+| **`Snap Finger`** | **Disintegrate** | Snap your fingers to trigger the Thanos ash effect! |
+| **`C`** | **Switch Camera** | Cycles to the next connected webcam device. |
 | **`T`** | **Cycle Trigger Mode** | Switch between `HYBRID` ➔ `GESTURE` ➔ `AUDIO` ➔ `HOTKEY`. |
 | **`+`** / **`=`** | **Sensitivity Up** | Lowers audio threshold for softer snaps. |
 | **`-`** / **`_`** | **Sensitivity Down**| Raises audio threshold to ignore ambient background clatter. |
