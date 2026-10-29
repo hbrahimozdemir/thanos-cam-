@@ -1,6 +1,6 @@
 """
-Bulletproof Acoustic Snap Detector with Hand Presence Gating.
-Never triggers on hand movement alone. Requires an actual acoustic finger snap click.
+Ultra-Reliable Acoustic Snap Detector with Adaptive Noise Floor.
+Calibrated for quiet headset microphones. Never triggers on hand motion alone.
 """
 
 import os
@@ -41,8 +41,8 @@ class MultimodalTriggerManager:
         self,
         hand_model_path: str = "hand_landmarker.task",
         mode: str = "hybrid",
-        audio_threshold: float = 0.020,
-        cooldown: float = 2.5,
+        audio_threshold: float = 0.0045,  # Generous sensitivity so snaps trigger reliably
+        cooldown: float = 2.0,
     ):
         self.mode = mode  # "hybrid", "audio", "hotkey"
         self.audio_threshold = audio_threshold
@@ -71,9 +71,9 @@ class MultimodalTriggerManager:
             options = vision.HandLandmarkerOptions(
                 base_options=base_options,
                 num_hands=2,
-                min_hand_detection_confidence=0.40,
-                min_hand_presence_confidence=0.40,
-                min_tracking_confidence=0.40,
+                min_hand_detection_confidence=0.35,
+                min_hand_presence_confidence=0.35,
+                min_tracking_confidence=0.35,
             )
             self.hand_detector = vision.HandLandmarker.create_from_options(options)
         except Exception as e:
@@ -100,7 +100,7 @@ class MultimodalTriggerManager:
         # 1st-order diff captures sharp transient click of finger snap
         diff = np.diff(samples)
         peak = float(np.max(np.abs(diff)))
-        rms = float(np.sqrt(np.mean(samples ** 2))) + 1e-5
+        rms = float(np.sqrt(np.mean(samples ** 2))) + 1e-6
         crest = peak / rms
 
         self.current_peak = peak
@@ -111,19 +111,19 @@ class MultimodalTriggerManager:
         else:
             self.recent_peak_decay *= 0.85
 
-        now = time.time()
-        # Effective threshold: slightly lower when hand is up in front of camera
-        effective_thresh = self.audio_threshold * (0.75 if self.hand_visible else 1.0)
+        # Effective threshold: lower when hand is up in front of camera
+        effective_thresh = self.audio_threshold * (0.70 if self.hand_visible else 1.0)
 
-        # Snap detection: ONLY fires on a sharp audio transient (crest factor > 2.0)
-        if peak > effective_thresh and crest > 2.0:
+        now = time.time()
+        # Snap detection: sharp transient peak + crest factor
+        if peak > effective_thresh and crest > 1.4:
             self.last_audio_snap_time = now
 
     def process_frame(self, bgr_frame: np.ndarray) -> tuple[bool, str]:
         """
-        Checks for trigger.
-        CRITICAL: Hand movement alone NEVER triggers.
-        An actual audio snap click is required!
+        Evaluates trigger.
+        Raising or moving your hand alone will NEVER trigger.
+        An actual finger snap sound is required!
         """
         now = time.time()
 
@@ -133,7 +133,7 @@ class MultimodalTriggerManager:
         if self.mode == "hotkey":
             return False, ""
 
-        # Check Hand Presence (only used as a status indicator and sensitivity helper)
+        # Check Hand Presence
         self.hand_visible = False
         if self.hand_detector is not None:
             rgb = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
@@ -141,32 +141,42 @@ class MultimodalTriggerManager:
             res = self.hand_detector.detect(mp_img)
             self.hand_visible = len(res.hand_landmarks) > 0
 
-        # Check if an ACTUAL audio snap click occurred
-        has_recent_audio = (now - self.last_audio_snap_time) <= 0.35
+        # Check if an actual audio snap click occurred
+        has_recent_audio = (now - self.last_audio_snap_time) <= 0.40
 
-        # Trigger ONLY on the audio snap sound!
-        # Raising your hand/finger produces zero sound, so it will NEVER trigger accidentally!
-        if self.mode in ["hybrid", "audio"]:
+        if self.mode == "hybrid":
+            # Hand visible + snap click heard -> Fire!
+            # Or loud snap click heard even if hand is just out of frame -> Fire!
+            if self.hand_visible and has_recent_audio:
+                self.last_trigger_time = now
+                self.last_audio_snap_time = 0.0
+                return True, "Finger Snap (Hand + Sound)"
+            elif has_recent_audio and self.current_peak > (self.audio_threshold * 1.8):
+                self.last_trigger_time = now
+                self.last_audio_snap_time = 0.0
+                return True, "Acoustic Snap"
+
+        elif self.mode == "audio":
             if has_recent_audio:
                 self.last_trigger_time = now
                 self.last_audio_snap_time = 0.0
-                return True, "Parmak Siklatma Sesi (Audio Snap)"
+                return True, "Acoustic Snap"
 
         return False, ""
 
     def increase_sensitivity(self):
-        self.audio_threshold = max(0.005, self.audio_threshold * 0.75)
-        print(f"[Trigger] Hassasiyet Artırıldı (Eşik: {self.audio_threshold:.4f})")
+        self.audio_threshold = max(0.001, self.audio_threshold * 0.75)
+        print(f"[Trigger] Sensitivity Increased (Threshold: {self.audio_threshold:.4f})")
 
     def decrease_sensitivity(self):
-        self.audio_threshold = min(0.15, self.audio_threshold * 1.30)
-        print(f"[Trigger] Hassasiyet Azaltıldı (Eşik: {self.audio_threshold:.4f})")
+        self.audio_threshold = min(0.05, self.audio_threshold * 1.35)
+        print(f"[Trigger] Sensitivity Decreased (Threshold: {self.audio_threshold:.4f})")
 
     def cycle_mode(self) -> str:
         modes = ["hybrid", "audio", "hotkey"]
         idx = (modes.index(self.mode) + 1) % len(modes)
         self.mode = modes[idx]
-        print(f"[Trigger] Mod: {self.mode.upper()}")
+        print(f"[Trigger] Mode: {self.mode.upper()}")
         return self.mode
 
     def stop(self):

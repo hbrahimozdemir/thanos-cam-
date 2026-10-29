@@ -52,7 +52,7 @@ class CamDisappearApp:
         self.trigger = MultimodalTriggerManager(
             hand_model_path=self.config.model_hand_path,
             mode=self.config.trigger_mode,
-            audio_threshold=0.018,
+            audio_threshold=self.config.audio_threshold,
             cooldown=self.config.trigger_cooldown_sec,
         )
 
@@ -183,15 +183,15 @@ class CamDisappearApp:
 
             # Audio peak level
             peak_val = self.trigger.recent_peak_decay
-            fill_w = int(np.clip(peak_val * 1200, 0, meter_w))
+            fill_w = int(np.clip(peak_val * 4000, 0, meter_w))
             cv2.rectangle(frame, (mx, my), (mx + fill_w, my + meter_h), (0, 220, 255), -1)
 
             # Red threshold marker
-            th = self.trigger.audio_threshold * (0.65 if self.trigger.hand_visible else 1.0)
-            th_x = int(np.clip(mx + th * 1200, mx, mx + meter_w))
+            th = self.trigger.audio_threshold * (0.75 if self.trigger.hand_visible else 1.0)
+            th_x = int(np.clip(mx + th * 4000, mx, mx + meter_w))
             cv2.line(frame, (th_x, my - 2), (th_x, my + meter_h + 2), (0, 0, 255), 2)
 
-            cv2.putText(frame, f"Snap Threshold: {th:.3f} (+/-)", (mx, my + meter_h + 16), cv2.FONT_HERSHEY_SIMPLEX, 0.34, (180, 180, 180), 1)
+            cv2.putText(frame, f"Snap Threshold: {th:.4f} (+/-)", (mx, my + meter_h + 16), cv2.FONT_HERSHEY_SIMPLEX, 0.34, (180, 180, 180), 1)
 
         # 4. Bottom controls bar
         bg_status = "SAVED" if self.clean_background is not None else "EMPTY! (Press B)"
@@ -226,12 +226,11 @@ class CamDisappearApp:
                 if self.config.mirror_camera:
                     raw_frame = cv2.flip(raw_frame, 1)
 
-                # Multimodal Trigger Check
-                if self.state == "LIVE":
-                    triggered, trigger_src = self.trigger.process_frame(raw_frame)
-                    if triggered:
-                        mask = self.segmenter.get_mask(raw_frame)
-                        self.trigger_snap(raw_frame, mask, source=trigger_src)
+                # Snap Trigger Check (Snapping dissolves when LIVE, or reappears when DISAPPEARED)
+                triggered, trigger_src = self.trigger.process_frame(raw_frame)
+                if triggered:
+                    mask = self.segmenter.get_mask(raw_frame)
+                    self.trigger_snap(raw_frame, mask, source=trigger_src)
 
                 # State Rendering
                 clean_output_frame = None

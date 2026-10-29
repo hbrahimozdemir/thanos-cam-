@@ -18,12 +18,12 @@ class AppConfig:
     mirror_camera: bool = True
 
     # Trigger settings
-    # Modes: "hybrid" (Strict Gesture + Audio), "gesture" (Hand Snap only), "audio" (Snap Sound only), "hotkey" (Space/S key only)
+    # Modes: "hybrid" (Hand + Snap Sound), "audio" (Snap Sound only)
     trigger_mode: str = "hybrid"
-    audio_threshold: float = 0.035
-    min_arm_duration_sec: float = 0.20   # Must hold snap pinch for 0.2s before releasing to prevent speech/gesture false triggers
-    sync_window_sec: float = 0.20        # Audio click and gesture release must coincide within 0.2s
-    trigger_cooldown_sec: float = 3.0
+    audio_threshold: float = 0.0045
+    min_arm_duration_sec: float = 0.20
+    sync_window_sec: float = 0.20
+    trigger_cooldown_sec: float = 2.0
 
     # Effect settings
     dissolve_duration_sec: float = 2.4
