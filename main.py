@@ -1,5 +1,6 @@
 """
-CamDisappear - Thanos Disintegration Virtual Camera for Video Calls.
+ThanosCam (CamDisappear) - Standalone Virtual Camera Application.
+Disintegrate into dust and vanish from video calls with a snap of your fingers.
 """
 
 import os
@@ -7,7 +8,7 @@ import sys
 import time
 import argparse
 
-# Ensure robust cross-platform UTF-8 terminal output
+# Cross-platform safe terminal encoding
 if hasattr(sys.stdout, "reconfigure"):
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -31,21 +32,23 @@ class CamDisappearApp:
 
         self.clean_background = None
         self.state = "LIVE"  # "LIVE", "DISINTEGRATING", "DISAPPEARED"
+        self.current_cam_idx = self.config.camera_index
+        self.cap = None
 
-        # Initialize AI Segmentation
-        print("🧠 [1/4] MediaPipe Kişi Segmentasyonu yükleniyor...")
+        # 1. AI Person Segmentation
+        print("🧠 [1/4] Loading MediaPipe Person Segmentation...")
         self.segmenter = PersonSegmenter(self.config.model_segmenter_path)
 
-        # Initialize Disintegration Particle Engine
-        print("🌪️ [2/4] Thanos Kül Parçacık Motoru başlatılıyor...")
+        # 2. Particle Engine
+        print("🌪️ [2/4] Initializing Thanos Particle Disintegration Engine...")
         self.effect = ThanosDisintegrationEngine(
             width=self.config.width,
             height=self.config.height,
             fps=self.config.fps,
         )
 
-        # Initialize Multimodal Trigger Manager
-        print("⚡ [3/4] Şıklatma ve El Algılayıcı başlatılıyor...")
+        # 3. Multimodal Trigger
+        print("⚡ [3/4] Initializing Snap & Hand Gesture Detector...")
         self.trigger = MultimodalTriggerManager(
             hand_model_path=self.config.model_hand_path,
             mode=self.config.trigger_mode,
@@ -53,15 +56,14 @@ class CamDisappearApp:
             cooldown=self.config.trigger_cooldown_sec,
         )
 
-        # Initialize Virtual Camera Output
-        print("📷 [4/4] Sanal Kamera Sürücüsüne bağlanılıyor...")
+        # 4. Virtual Camera
+        print("📷 [4/4] Connecting to Virtual Camera Driver...")
         self.vcam = VirtualCameraOutput(
             width=self.config.width,
             height=self.config.height,
             fps=self.config.fps,
         )
 
-        # Load existing clean background if available
         self._load_saved_background()
 
     def _load_saved_background(self):
@@ -69,21 +71,21 @@ class CamDisappearApp:
             img = cv2.imread(self.config.background_path)
             if img is not None:
                 self.clean_background = cv2.resize(img, (self.config.width, self.config.height))
-                print(f"✅ Kayıtlı boş sandalye yüklendi: {self.config.background_path}")
+                print(f"✅ Loaded cached empty chair background: {self.config.background_path}")
 
     def capture_background(self, frame: np.ndarray):
         """Saves current camera frame as the empty chair background plate."""
         self.clean_background = frame.copy()
         cv2.imwrite(self.config.background_path, self.clean_background)
-        print(f"📸 Boş sandalye kaydedildi: {self.config.background_path}")
+        print(f"📸 Empty chair background saved: {self.config.background_path}")
 
-    def trigger_snap(self, frame: np.ndarray, mask: np.ndarray, source: str = "Manuel"):
+    def trigger_snap(self, frame: np.ndarray, mask: np.ndarray, source: str = "Manual"):
         if self.clean_background is None:
-            print("⚠️ UYARI: Önce sandalyeden kalkıp [B] tuşuna basarak boş sandalyenizi kaydedin!")
+            print("⚠️ WARNING: Step out of frame and press [B] to save your empty chair first!")
             return
 
         if self.state == "LIVE":
-            print(f"💥 ŞIKLATMA ALGILANDI ({source})! Kül olarak dağılma başladı...")
+            print(f"💥 SNAP TRIGGERED ({source})! Disintegrating into dust...")
             self.state = "DISINTEGRATING"
             self.effect.start(
                 person_frame=frame,
@@ -94,12 +96,41 @@ class CamDisappearApp:
             )
 
     def reset_to_live(self):
-        print("✨ Canlanılıyor (Kameraya dönüldü)...")
+        print("✨ Restoring live camera...")
         self.effect.reset()
         self.state = "LIVE"
 
+    def open_camera(self, idx: int):
+        """Opens camera with DirectShow backend."""
+        if self.cap is not None:
+            self.cap.release()
+
+        print(f"🎥 Connecting to Camera {idx}...")
+        cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(idx)
+
+        if cap.isOpened():
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.config.width)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.config.height)
+            self.cap = cap
+            self.current_cam_idx = idx
+            print(f"✅ Camera {idx} connected successfully!")
+            return True
+        else:
+            print(f"❌ Could not open Camera {idx}.")
+            return False
+
+    def switch_camera(self):
+        """Cycles to the next camera index (0 -> 1 -> 2 -> 0)."""
+        next_idx = (self.current_cam_idx + 1) % 4
+        print(f"🔄 Switching camera to index {next_idx}...")
+        if not self.open_camera(next_idx):
+            # If next index fails, try going back to 0
+            self.open_camera(0)
+
     def draw_hud(self, frame: np.ndarray):
-        """Draws clean, non-overlapping HUD on local preview window."""
+        """Draws aesthetic English HUD on local preview window."""
         h, w = frame.shape[:2]
 
         # Top and bottom bars
@@ -110,39 +141,38 @@ class CamDisappearApp:
 
         # 1. State indicator (Left)
         if self.state == "LIVE":
-            st_text = "DURUM: CANLI"
+            st_text = "STATUS: LIVE (Visible)"
             st_color = (0, 230, 100)
         elif self.state == "DISINTEGRATING":
-            st_text = f"KUL OLUYOR... (%{int(self.effect.progress * 100)})"
+            st_text = f"DISINTEGRATING... (%{int(self.effect.progress * 100)})"
             st_color = (100, 180, 255)
         else:
-            st_text = "YOK OLDUNUZ (Sandalye Bos)"
+            st_text = "DISAPPEARED (Chair Empty)"
             st_color = (0, 70, 255)
 
-        cv2.putText(frame, st_text, (15, 26), cv2.FONT_HERSHEY_DUPLEX, 0.55, st_color, 1, cv2.LINE_AA)
+        cv2.putText(frame, st_text, (15, 25), cv2.FONT_HERSHEY_DUPLEX, 0.52, st_color, 1, cv2.LINE_AA)
 
-        # Sub-status: Trigger Mode
-        mode_text = f"Mod: {self.trigger.mode.upper()} [T]"
-        cv2.putText(frame, mode_text, (15, 44), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (180, 180, 220), 1, cv2.LINE_AA)
+        # Sub-status: Mode & Camera
+        info_text = f"Mode: {self.trigger.mode.upper()} [T] | Cam: {self.current_cam_idx} [C to switch]"
+        cv2.putText(frame, info_text, (15, 43), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (180, 180, 220), 1, cv2.LINE_AA)
 
         # 2. Hand status (Center)
         if self.trigger.hand_visible:
-            hand_str = "EL: HAZIR (Siklatabilirsiniz)"
+            hand_str = "HAND: READY TO SNAP"
             hand_col = (0, 255, 120)
         else:
-            hand_str = "EL: Bekleniyor (Elinizi kaldirin)"
-            hand_col = (140, 140, 140)
+            hand_str = "HAND: Waiting (Raise hand)"
+            hand_col = (130, 130, 130)
 
-        cv2.putText(frame, hand_str, (int(w * 0.32), 32), cv2.FONT_HERSHEY_SIMPLEX, 0.48, hand_col, 1, cv2.LINE_AA)
+        cv2.putText(frame, hand_str, (int(w * 0.38), 30), cv2.FONT_HERSHEY_SIMPLEX, 0.44, hand_col, 1, cv2.LINE_AA)
 
         # 3. Audio meter & threshold marker (Right)
         if self.trigger.audio_active:
-            meter_w = 140
-            meter_h = 14
+            meter_w = 130
+            meter_h = 13
             mx = w - meter_w - 15
             my = 12
 
-            # Background meter bar
             cv2.rectangle(frame, (mx, my), (mx + meter_w, my + meter_h), (45, 45, 50), -1)
 
             # Audio peak level
@@ -155,41 +185,34 @@ class CamDisappearApp:
             th_x = int(np.clip(mx + th * 1200, mx, mx + meter_w))
             cv2.line(frame, (th_x, my - 2), (th_x, my + meter_h + 2), (0, 0, 255), 2)
 
-            cv2.putText(frame, f"Esik: {th:.3f} (+ / -)", (mx, my + meter_h + 16), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (180, 180, 180), 1)
+            cv2.putText(frame, f"Snap Threshold: {th:.3f} (+/-)", (mx, my + meter_h + 16), cv2.FONT_HERSHEY_SIMPLEX, 0.34, (180, 180, 180), 1)
 
         # 4. Bottom controls bar
-        bg_status = "KAYITLI" if self.clean_background is not None else "YOK! (B'ye basin)"
-        ctrl = f"[B] Sandalye: {bg_status} | [S/Space] Sikla | [R] Geri Don | [+/-] Hassasiyet | [Q] Cikis"
-        cv2.putText(frame, ctrl, (12, h - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.44, (210, 210, 210), 1, cv2.LINE_AA)
+        bg_status = "SAVED" if self.clean_background is not None else "EMPTY! (Press B)"
+        ctrl = f"[B] Empty Chair: {bg_status} | [S] Snap | [C] Switch Cam | [R] Reset | [+/-] Sensitivity | [Q] Quit"
+        cv2.putText(frame, ctrl, (12, h - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (210, 210, 210), 1, cv2.LINE_AA)
 
     def run(self):
-        print(f"🎥 Web Kamerası {self.config.camera_index} açılıyor...")
-        cap = cv2.VideoCapture(self.config.camera_index, cv2.CAP_DSHOW)
-        if not cap.isOpened():
-            cap = cv2.VideoCapture(self.config.camera_index)
-
-        if not cap.isOpened():
-            print(f"❌ HATA: Web kamerası (Index: {self.config.camera_index}) açılamadı!")
-            print("Lütfen kameranızın başka bir program (Teams, Zoom, Tarayıcı) tarafından kullanılmadığından emin olun.")
+        if not self.open_camera(self.current_cam_idx):
+            print("❌ Error: Could not connect to any camera. Please make sure no other app (Teams/Zoom) is locking it.")
             return
 
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.config.width)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.config.height)
-
-        cv2.namedWindow("CamDisappear (Thanos Cam)", cv2.WINDOW_AUTOSIZE)
+        cv2.namedWindow("ThanosCam (CamDisappear)", cv2.WINDOW_AUTOSIZE)
 
         print("\n" + "=" * 60)
-        print("🚀 CAMDISAPPEAR ÇALIŞIYOR!")
-        print("  1. [B] tuşuna basın -> Boş sandalyenizi kaydedin.")
-        print("  2. Elinizi kaldırıp parmağınızı şıklatın -> Kül olarak yok olun!")
-        print("  3. [R] tuşuna basın -> Geri dönün.")
-        print("  4. [S] veya [Space] -> Acil manuel çıkış.")
-        print("  5. [+] ve [-] -> Mikrofon şıklatma hassasiyetini ayarlayın.")
+        print("🚀 THANOSCAM IS READY!")
+        print("  [B]        -> Step out and save Empty Chair")
+        print("  [S] / Space-> Snap / Disintegrate immediately")
+        print("  [C]        -> Switch to next camera device")
+        print("  [T]        -> Switch trigger mode (Hybrid/Audio/Gesture/Hotkey)")
+        print("  [+] / [-]  -> Adjust snap sensitivity")
+        print("  [R]        -> Reset & Reappear")
+        print("  [Q] / ESC  -> Quit")
         print("=" * 60 + "\n")
 
         try:
             while True:
-                ret, raw_frame = cap.read()
+                ret, raw_frame = self.cap.read()
                 if not ret:
                     time.sleep(0.01)
                     continue
@@ -215,7 +238,7 @@ class CamDisappearApp:
                     clean_output_frame = disintegrated if disintegrated is not None else self.clean_background.copy()
                     if self.effect.is_finished:
                         self.state = "DISAPPEARED"
-                        print("💀 Vücut kül oldu. Sandalye boş.")
+                        print("💀 Disintegration complete. Chair is empty.")
                 elif self.state == "DISAPPEARED":
                     clean_output_frame = self.clean_background.copy()
 
@@ -225,7 +248,7 @@ class CamDisappearApp:
                 # Local Preview Window with HUD
                 hud_frame = clean_output_frame.copy()
                 self.draw_hud(hud_frame)
-                cv2.imshow("CamDisappear (Thanos Cam)", hud_frame)
+                cv2.imshow("ThanosCam (CamDisappear)", hud_frame)
 
                 # Key controls
                 key = cv2.waitKey(1) & 0xFF
@@ -235,7 +258,9 @@ class CamDisappearApp:
                     self.capture_background(raw_frame)
                 elif key in [ord("s"), ord("S"), 32]:  # S or Space
                     mask = self.segmenter.get_mask(raw_frame)
-                    self.trigger_snap(raw_frame, mask, source="Klavye Kısayolu")
+                    self.trigger_snap(raw_frame, mask, source="Hotkey")
+                elif key in [ord("c"), ord("C")]:
+                    self.switch_camera()
                 elif key in [ord("r"), ord("R")]:
                     self.reset_to_live()
                 elif key in [ord("t"), ord("T")]:
@@ -247,17 +272,17 @@ class CamDisappearApp:
                     self.trigger.decrease_sensitivity()
 
         finally:
-            if cap is not None:
-                cap.release()
+            if self.cap is not None:
+                self.cap.release()
             self.vcam.close()
             self.trigger.stop()
             cv2.destroyAllWindows()
-            print("👋 CamDisappear kapatıldı.")
+            print("👋 ThanosCam closed.")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="CamDisappear - Thanos Disintegration Virtual Camera")
-    parser.add_argument("--camera", type=int, default=0, help="Camera device index")
+    parser = argparse.ArgumentParser(description="ThanosCam - Disintegrate into dust on video calls")
+    parser.add_argument("--camera", type=int, default=0, help="Camera device index (default: 0)")
     parser.add_argument("--width", type=int, default=640, help="Frame width (default: 640)")
     parser.add_argument("--height", type=int, default=480, help="Frame height (default: 480)")
     parser.add_argument("--fps", type=int, default=30, help="Target FPS (default: 30)")

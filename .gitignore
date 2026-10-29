@@ -37,6 +37,9 @@ config.json
 *.log
 *.exe
 OBS-Installer.exe
+*.spec
+dist/
+build/
 
 # Media demo files
 test_output.mp4

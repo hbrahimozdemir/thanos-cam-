@@ -5,6 +5,7 @@ gated with MediaPipe Hand presence.
 """
 
 import os
+import sys
 import time
 import math
 import numpy as np
@@ -13,6 +14,27 @@ import sounddevice as sd
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
+
+
+def resolve_model_path(model_path: str) -> str:
+    if os.path.isabs(model_path) and os.path.exists(model_path):
+        return model_path
+
+    if hasattr(sys, "_MEIPASS"):
+        bundle_p = os.path.join(sys._MEIPASS, os.path.basename(model_path))
+        if os.path.exists(bundle_p):
+            return bundle_p
+
+    possible_paths = [
+        os.path.abspath(model_path),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), model_path),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), model_path),
+        os.path.join(os.getcwd(), model_path),
+    ]
+    for p in possible_paths:
+        if os.path.exists(p):
+            return p
+    return model_path
 
 
 class MultimodalTriggerManager:
@@ -47,17 +69,7 @@ class MultimodalTriggerManager:
         self._init_audio_stream()
 
     def _init_hand_detector(self, model_path: str):
-        if not os.path.isabs(model_path):
-            possible_paths = [
-                os.path.abspath(model_path),
-                os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), model_path),
-                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), model_path),
-            ]
-            for p in possible_paths:
-                if os.path.exists(p):
-                    model_path = p
-                    break
-
+        model_path = resolve_model_path(model_path)
         try:
             base_options = python.BaseOptions(model_asset_path=model_path)
             options = vision.HandLandmarkerOptions(

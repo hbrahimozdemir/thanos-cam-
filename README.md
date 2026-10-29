@@ -69,12 +69,17 @@ If you gesticulate wildly while talking, traditional sound/motion triggers trigg
 
 ## 🚀 Quick Start
 
-### 1. Requirements
+### Option A: Portable Standalone Executable (No Python Required)
+1. Download the latest `ThanosCam.exe` from [GitHub Releases](https://github.com/hbrahimozdemir/thanos-cam/releases).
+2. Double-click `ThanosCam.exe` and enjoy!
+
+### Option B: Run from Source
+#### 1. Requirements
 - Python 3.10+
 - A webcam and microphone
 - [OBS Studio](https://obsproject.com/) *(for virtual camera streaming)*
 
-### 2. Installation
+#### 2. Installation
 ```bash
 # Clone the repository
 git clone https://github.com/hbrahimozdemir/thanos-cam.git
