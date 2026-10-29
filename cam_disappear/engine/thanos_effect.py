@@ -210,7 +210,7 @@ class ThanosDisintegrationEngine:
             alpha = remaining_mask[:, :, np.newaxis]
             result = (alpha * person_styled + (1.0 - alpha) * result.astype(np.float32)).astype(np.uint8)
 
-        # 6. Render ash particles on top
+        # 6. Render ash dust particles on top
         if len(self.pos) > 0:
             ix = self.pos[:, 0].astype(np.int32)
             iy = self.pos[:, 1].astype(np.int32)
@@ -218,15 +218,17 @@ class ThanosDisintegrationEngine:
             valid = (ix >= 0) & (ix < w) & (iy >= 0) & (iy < h)
             ix, iy = ix[valid], iy[valid]
             p_colors = self.colors[valid]
-            p_alpha = self.life[valid, np.newaxis]
+            p_alpha = self.life[valid]
+            p_sizes = self.sizes[valid]
 
-            cur_bg = result[iy, ix].astype(np.float32)
-            blended = p_alpha * p_colors + (1.0 - p_alpha) * cur_bg
-            result[iy, ix] = np.clip(blended, 0, 255).astype(np.uint8)
-
-            for i in range(0, len(ix), 6):
-                r = max(1, int(self.sizes[valid][i]))
-                cv2.circle(result, (ix[i], iy[i]), r, p_colors[i].astype(int).tolist(), -1)
+            # Draw rich, visible ash dust flakes
+            for i in range(len(ix)):
+                alpha = p_alpha[i]
+                if alpha <= 0.05:
+                    continue
+                r = max(1, int(p_sizes[i]))
+                col = (p_colors[i] * alpha).astype(int).tolist()
+                cv2.circle(result, (ix[i], iy[i]), r, col, -1)
 
         if curr_tau >= 1.0 and len(self.pos) == 0:
             self.is_finished = True

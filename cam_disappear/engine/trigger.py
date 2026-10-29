@@ -167,29 +167,28 @@ class MultimodalTriggerManager:
                             self.last_gesture_snap_time = now
                         self.was_pinching = False
 
-        has_recent_audio = (now - self.last_audio_snap_time) <= 0.40
-        has_recent_gesture = visual_snap or ((now - self.last_gesture_snap_time) <= 0.40)
+        has_recent_audio = (now - self.last_audio_snap_time) <= 0.45
+        has_recent_gesture = visual_snap or ((now - self.last_gesture_snap_time) <= 0.45)
 
         # Trigger evaluation
         if self.mode == "hybrid":
-            # If hand is up and a snap click is heard -> FIRE!
-            # Or if you do a visual snap flick -> FIRE!
-            if (self.hand_visible and has_recent_audio) or (visual_snap and has_recent_audio):
+            # Highly responsive: Triggers on audio snap OR visual finger snap!
+            if has_recent_audio or visual_snap:
                 self.last_trigger_time = now
-                return True, "Parmak Siklatma (El + Ses)"
-            elif visual_snap:
-                self.last_trigger_time = now
-                return True, "Gorsel El Siklatmasi"
+                self.last_audio_snap_time = 0.0
+                src = "Audio Snap" if has_recent_audio else "Visual Gesture"
+                return True, src
 
         elif self.mode == "audio":
             if has_recent_audio:
                 self.last_trigger_time = now
-                return True, "Sesli Siklatma"
+                self.last_audio_snap_time = 0.0
+                return True, "Audio Snap"
 
         elif self.mode == "gesture":
             if visual_snap:
                 self.last_trigger_time = now
-                return True, "Gorsel El Siklatmasi"
+                return True, "Visual Gesture"
 
         return False, ""
 

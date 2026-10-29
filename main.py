@@ -80,9 +80,12 @@ class CamDisappearApp:
         print(f"📸 Empty chair background saved: {self.config.background_path}")
 
     def trigger_snap(self, frame: np.ndarray, mask: np.ndarray, source: str = "Manual"):
+        # Auto-create background if user hasn't pressed [B] yet so the effect NEVER fails!
         if self.clean_background is None:
-            print("⚠️ WARNING: Step out of frame and press [B] to save your empty chair first!")
-            return
+            blurred = cv2.GaussianBlur(frame, (51, 51), 0)
+            alpha = np.clip(mask[:, :, np.newaxis] * 1.5, 0.0, 1.0)
+            self.clean_background = (alpha * blurred + (1.0 - alpha) * frame.astype(np.float32)).astype(np.uint8)
+            print("ℹ️ Auto-generated ambient background (press [B] anytime to save empty chair).")
 
         if self.state == "LIVE":
             print(f"💥 SNAP TRIGGERED ({source})! Disintegrating into dust...")
@@ -94,6 +97,9 @@ class CamDisappearApp:
                 duration_sec=self.config.dissolve_duration_sec,
                 wind_direction=self.config.wind_direction,
             )
+        elif self.state == "DISAPPEARED":
+            # Toggle back to live if already disappeared
+            self.reset_to_live()
 
     def reset_to_live(self):
         print("✨ Restoring live camera...")
