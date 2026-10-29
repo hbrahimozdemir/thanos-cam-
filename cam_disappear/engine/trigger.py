@@ -1,7 +1,6 @@
 """
-Ultra-Responsive Multimodal Trigger System.
-Clean, lightweight sounddevice audio transient detection
-gated with MediaPipe Hand presence.
+Bulletproof Acoustic Snap Detector with Hand Presence Gating.
+Never triggers on hand movement alone. Requires an actual acoustic finger snap click.
 """
 
 import os
@@ -42,26 +41,23 @@ class MultimodalTriggerManager:
         self,
         hand_model_path: str = "hand_landmarker.task",
         mode: str = "hybrid",
-        audio_threshold: float = 0.018,  # Generous sensitivity so snaps trigger easily
+        audio_threshold: float = 0.020,
         cooldown: float = 2.5,
     ):
-        self.mode = mode  # "hybrid", "gesture", "audio", "hotkey"
+        self.mode = mode  # "hybrid", "audio", "hotkey"
         self.audio_threshold = audio_threshold
         self.cooldown = cooldown
 
-        # Audio state
+        # Audio transient state
         self.stream = None
         self.audio_active = False
         self.current_peak = 0.0
         self.recent_peak_decay = 0.0
         self.last_audio_snap_time = 0.0
 
-        # Visual Hand state
+        # Visual Hand presence
         self.hand_detector = None
         self.hand_visible = False
-        self.was_pinching = False
-        self.last_pinch_time = 0.0
-        self.last_gesture_snap_time = 0.0
         self.last_trigger_time = 0.0
 
         # Initialize
@@ -116,15 +112,19 @@ class MultimodalTriggerManager:
             self.recent_peak_decay *= 0.85
 
         now = time.time()
-        # If hand is visible, lower threshold to make snapping effortless
-        effective_thresh = self.audio_threshold * (0.65 if self.hand_visible else 1.0)
+        # Effective threshold: slightly lower when hand is up in front of camera
+        effective_thresh = self.audio_threshold * (0.75 if self.hand_visible else 1.0)
 
-        # Snap detection: peak exceeds threshold and has a sharp crest factor
+        # Snap detection: ONLY fires on a sharp audio transient (crest factor > 2.0)
         if peak > effective_thresh and crest > 2.0:
             self.last_audio_snap_time = now
 
     def process_frame(self, bgr_frame: np.ndarray) -> tuple[bool, str]:
-        """Checks for snap trigger. Returns (triggered: bool, reason: str)."""
+        """
+        Checks for trigger.
+        CRITICAL: Hand movement alone NEVER triggers.
+        An actual audio snap click is required!
+        """
         now = time.time()
 
         if (now - self.last_trigger_time) < self.cooldown:
@@ -133,62 +133,24 @@ class MultimodalTriggerManager:
         if self.mode == "hotkey":
             return False, ""
 
-        # Visual Hand Processing
+        # Check Hand Presence (only used as a status indicator and sensitivity helper)
         self.hand_visible = False
-        visual_snap = False
-
         if self.hand_detector is not None:
             rgb = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
             mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
             res = self.hand_detector.detect(mp_img)
+            self.hand_visible = len(res.hand_landmarks) > 0
 
-            if len(res.hand_landmarks) > 0:
-                self.hand_visible = True
-                for lm in res.hand_landmarks:
-                    thumb = lm[4]
-                    middle = lm[12]
-                    wrist = lm[0]
+        # Check if an ACTUAL audio snap click occurred
+        has_recent_audio = (now - self.last_audio_snap_time) <= 0.35
 
-                    dist = math.hypot(thumb.x - middle.x, thumb.y - middle.y)
-                    scale = math.hypot(middle.x - wrist.x, middle.y - wrist.y) + 1e-4
-                    norm_dist = dist / scale
-
-                    # Pinch state (thumb & middle finger touching)
-                    is_pinching = norm_dist < 0.25
-
-                    if is_pinching:
-                        self.was_pinching = True
-                        self.last_pinch_time = now
-                    elif self.was_pinching:
-                        dt = now - self.last_pinch_time
-                        # Snap flick release
-                        if 0.02 < dt < 0.65:
-                            visual_snap = True
-                            self.last_gesture_snap_time = now
-                        self.was_pinching = False
-
-        has_recent_audio = (now - self.last_audio_snap_time) <= 0.45
-        has_recent_gesture = visual_snap or ((now - self.last_gesture_snap_time) <= 0.45)
-
-        # Trigger evaluation
-        if self.mode == "hybrid":
-            # Highly responsive: Triggers on audio snap OR visual finger snap!
-            if has_recent_audio or visual_snap:
-                self.last_trigger_time = now
-                self.last_audio_snap_time = 0.0
-                src = "Audio Snap" if has_recent_audio else "Visual Gesture"
-                return True, src
-
-        elif self.mode == "audio":
+        # Trigger ONLY on the audio snap sound!
+        # Raising your hand/finger produces zero sound, so it will NEVER trigger accidentally!
+        if self.mode in ["hybrid", "audio"]:
             if has_recent_audio:
                 self.last_trigger_time = now
                 self.last_audio_snap_time = 0.0
-                return True, "Audio Snap"
-
-        elif self.mode == "gesture":
-            if visual_snap:
-                self.last_trigger_time = now
-                return True, "Visual Gesture"
+                return True, "Parmak Siklatma Sesi (Audio Snap)"
 
         return False, ""
 
@@ -201,7 +163,7 @@ class MultimodalTriggerManager:
         print(f"[Trigger] Hassasiyet Azaltıldı (Eşik: {self.audio_threshold:.4f})")
 
     def cycle_mode(self) -> str:
-        modes = ["hybrid", "audio", "gesture", "hotkey"]
+        modes = ["hybrid", "audio", "hotkey"]
         idx = (modes.index(self.mode) + 1) % len(modes)
         self.mode = modes[idx]
         print(f"[Trigger] Mod: {self.mode.upper()}")
